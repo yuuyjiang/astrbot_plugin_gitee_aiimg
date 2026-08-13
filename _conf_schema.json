@@ -1423,6 +1423,12 @@
             "default": [],
             "obvious_hint": true
           },
+          "media_base_url": {
+            "type": "string",
+            "description": "图片下载 Base URL（可选）",
+            "hint": "仅当 Grok2API 返回 localhost/127.0.0.1 图片地址且 base_url 对 AstrBot 不可达时填写，例如 https://grok.example.com；只替换协议、主机和端口。",
+            "default": ""
+          },
           "model": {
             "type": "string",
             "description": "模型名称",

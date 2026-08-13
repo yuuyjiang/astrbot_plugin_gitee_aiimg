@@ -595,6 +595,7 @@ class ProviderRegistry:
                 default_size=str(conf.get("default_size") or "4096x4096").strip(),
                 extra_body=_as_dict(conf.get("extra_body")) or None,
                 output_format=str(conf.get("output_format") or "jpeg"),
+                media_base_url=str(conf.get("media_base_url") or "").strip(),
             )
 
         if template_key == "gitee_images":

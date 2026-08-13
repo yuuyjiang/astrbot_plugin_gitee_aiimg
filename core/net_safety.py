@@ -91,6 +91,7 @@ def collect_trusted_origins(config: dict) -> set[str]:
             "base_url",
             "api_url",
             "server_url",
+            "media_base_url",
             "full_generate_url",
             "full_edit_url",
         ):

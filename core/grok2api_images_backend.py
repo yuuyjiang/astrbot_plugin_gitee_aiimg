@@ -11,12 +11,13 @@ Grok2API Images 后端（/v1/images/generations）
 from __future__ import annotations
 
 import base64
+import ipaddress
 import json
 import re
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
 
@@ -39,6 +40,49 @@ def _origin(url: str) -> str:
     except Exception:
         pass
     return ""
+
+
+def _is_loopback_media_host(host: str) -> bool:
+    host = str(host or "").strip().lower()
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _rewrite_loopback_media_url(ref: str, *, provider_url: str) -> str:
+    """Replace a loopback result URL's origin with this provider's origin."""
+    value = str(ref or "").strip()
+    try:
+        parts = urlsplit(value)
+        provider_parts = urlsplit(str(provider_url or "").strip())
+    except ValueError:
+        return value
+
+    if (
+        parts.scheme not in {"http", "https"}
+        or not parts.netloc
+        or not _is_loopback_media_host(parts.hostname or "")
+        or provider_parts.scheme not in {"http", "https"}
+        or not provider_parts.hostname
+    ):
+        return value
+
+    host = provider_parts.hostname
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    netloc = f"{host}:{provider_parts.port}" if provider_parts.port else host
+    return urlunsplit(
+        (
+            provider_parts.scheme,
+            netloc,
+            parts.path or "/",
+            parts.query,
+            parts.fragment,
+        )
+    )
 
 
 def _normalize_images_generations_url(base_url: str) -> str:
@@ -258,6 +302,7 @@ class Grok2ApiImagesBackend:
         default_size: str = "1024x1024",
         extra_body: dict | None = None,
         output_format: str = "jpeg",
+        media_base_url: str = "",
     ):
         self.imgr = imgr
         self.base_url = str(base_url or "").strip()
@@ -267,6 +312,7 @@ class Grok2ApiImagesBackend:
         self.default_size = str(default_size or "4096x4096").strip()
         self.extra_body = extra_body or {}
         self.output_format = str(output_format or "jpeg").strip().lower()
+        self.media_base_url = str(media_base_url or "").strip()
 
         self._endpoint_generate = _normalize_images_generations_url(self.base_url)
         self._endpoint_edit = _normalize_images_edits_url(self.base_url)
@@ -527,6 +573,16 @@ class Grok2ApiImagesBackend:
             )
 
         if ref.startswith(("http://", "https://")):
+            rewritten = _rewrite_loopback_media_url(
+                ref, provider_url=self.media_base_url or self.base_url
+            )
+            if rewritten != ref:
+                logger.info(
+                    "[Grok2APIImages] rewrite loopback image URL: %s -> %s",
+                    ref,
+                    rewritten,
+                )
+            ref = rewritten
             return await self.imgr.download_image(ref, output_format=self.output_format)
 
         # Relative URL like "/images/xxx.png"
